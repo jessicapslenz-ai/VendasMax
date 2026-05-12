@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Product } from '../types';
-import { Plus, Edit, Trash2, PackagePlus, ImagePlus, X, DollarSign, TrendingUp, PiggyBank, Percent } from 'lucide-react';
+import { Plus, Edit, Trash2, PackagePlus, ImagePlus, X, DollarSign, TrendingUp, PiggyBank, Percent, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const Products = () => {
@@ -31,6 +31,9 @@ export const Products = () => {
   const totalSales = filteredProducts.reduce((acc, p) => acc + (p.price * p.stock), 0);
   const potentialProfit = totalSales - totalCost;
   const averageMargin = totalSales > 0 ? (potentialProfit / totalSales) * 100 : 0;
+  
+  const lowStockProducts = filteredProducts.filter(p => p.stock < 10);
+  const lowStockCount = lowStockProducts.length;
 
   const handleOpenDialog = (product?: Product) => {
     if (product) {
@@ -209,7 +212,17 @@ export const Products = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <h3 className="tracking-tight text-sm font-medium">Estoque Baixo</h3>
+            <AlertTriangle className={`h-4 w-4 ${lowStockCount > 0 ? 'text-amber-500 animate-pulse' : 'text-muted-foreground'}`} />
+          </div>
+          <div className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-amber-600' : ''}`}>{lowStockCount}</div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Menos de 10 unidades
+          </p>
+        </div>
         <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
           <div className="flex flex-row items-center justify-between space-y-0 pb-2">
             <h3 className="tracking-tight text-sm font-medium">Valor Total em Custo</h3>
@@ -289,7 +302,16 @@ export const Products = () => {
                     <TableCell>{category?.name || 'Sem Categoria'}</TableCell>
                     <TableCell>{formatCurrency(product.price)}</TableCell>
                     <TableCell>{product.costPrice ? `${formatCurrency(product.costPrice)}` : '-'}</TableCell>
-                    <TableCell>{product.stock}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className={product.stock < 10 ? 'text-amber-600 font-bold' : ''}>
+                          {product.stock}
+                        </span>
+                        {product.stock < 10 && (
+                          <AlertTriangle className="h-4 w-4 text-amber-500" title="Estoque Baixo" />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleOpenStockDialog(product)} title="Registrar Entrada">
                         <PackagePlus className="h-4 w-4 text-emerald-500" />

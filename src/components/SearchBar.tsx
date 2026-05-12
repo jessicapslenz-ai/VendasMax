@@ -5,6 +5,25 @@ import { Input } from './ui/input';
 import { useStore } from '../store/StoreContext';
 import { useNavigate } from 'react-router-dom';
 
+const HighlightMatch = ({ text, query }: { text: string; query: string }) => {
+  if (!query.trim()) return <>{text}</>;
+  
+  const parts = text.split(new RegExp(`(${query})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) => 
+        part.toLowerCase() === query.toLowerCase() ? (
+          <span key={i} className="bg-primary/20 text-primary font-bold rounded-sm px-0.5">
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+};
+
 export const SearchBar = () => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -81,7 +100,9 @@ export const SearchBar = () => {
                       className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground text-left"
                     >
                       <Package className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">{product.name}</span>
+                      <span className="truncate">
+                        <HighlightMatch text={product.name} query={query} />
+                      </span>
                       <span className="ml-auto text-xs text-muted-foreground">{formatCurrency(product.price)}</span>
                     </button>
                   ))}
@@ -98,8 +119,12 @@ export const SearchBar = () => {
                       className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground text-left"
                     >
                       <Users className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">{client.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground truncate max-w-[100px]">{client.email}</span>
+                      <span className="truncate">
+                        <HighlightMatch text={client.name} query={query} />
+                      </span>
+                      <span className="ml-auto text-xs text-muted-foreground truncate max-w-[100px]">
+                        <HighlightMatch text={client.email} query={query} />
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -110,6 +135,7 @@ export const SearchBar = () => {
                   <div className="text-xs font-semibold text-muted-foreground mb-1 px-2">Pedidos</div>
                   {filteredOrders.map(order => {
                     const client = clients.find(c => c.id === order.clientId);
+                    const orderIdShort = order.id.slice(0, 8);
                     return (
                       <button
                         key={order.id}
@@ -117,8 +143,12 @@ export const SearchBar = () => {
                         className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground text-left"
                       >
                         <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                        <span className="truncate">Pedido #{order.id.slice(0, 8)}</span>
-                        <span className="ml-auto text-xs text-muted-foreground truncate max-w-[100px]">{client?.name}</span>
+                        <span className="truncate">
+                          Pedido #<HighlightMatch text={orderIdShort} query={query} />
+                        </span>
+                        <span className="ml-auto text-xs text-muted-foreground truncate max-w-[100px]">
+                          {client && <HighlightMatch text={client.name} query={query} />}
+                        </span>
                       </button>
                     )
                   })}
