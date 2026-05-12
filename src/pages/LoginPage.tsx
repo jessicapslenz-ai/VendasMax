@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { Store, LogIn } from 'lucide-react';
+import { Store, LogIn, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export const LoginPage: React.FC = () => {
-  const { user, signIn, loading } = useAuth();
+  const { user, signIn, loading: authLoading } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="animate-pulse text-2xl font-bold text-primary">VendaMax...</div>
@@ -18,6 +20,25 @@ export const LoginPage: React.FC = () => {
   if (user) {
     return <Navigate to="/" replace />;
   }
+
+  const handleSignIn = async () => {
+    try {
+      setIsSigningIn(true);
+      await signIn();
+      toast.success('Login realizado com sucesso!');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'auth/popup-blocked') {
+        toast.error('O pop-up de login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        toast.error('O login foi cancelado.');
+      } else {
+        toast.error('Erro ao realizar login. Tente novamente.');
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
@@ -44,12 +65,17 @@ export const LoginPage: React.FC = () => {
 
           <div className="mt-8">
             <Button
-              onClick={() => signIn()}
+              onClick={handleSignIn}
               size="lg"
+              disabled={isSigningIn}
               className="w-full space-x-3 rounded-xl py-6 text-lg font-semibold transition-all hover:shadow-lg hover:shadow-primary/10 active:scale-95"
             >
-              <LogIn className="h-5 w-5" />
-              <span>Entrar com Google</span>
+              {isSigningIn ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <LogIn className="h-5 w-5" />
+              )}
+              <span>{isSigningIn ? 'Entrando...' : 'Entrar com Google'}</span>
             </Button>
           </div>
         </div>
