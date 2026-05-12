@@ -151,7 +151,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribes = collections.map(({ name, setter }) => {
       const q = query(collection(db, name), where('userId', '==', user.uid));
       return onSnapshot(q, (snapshot) => {
-        setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setter(data);
+        
+        // Seed defaults if empty for specific collections
+        if (snapshot.empty && (name === 'categories' || name === 'channels' || name === 'paymentMethods')) {
+          seedDefaults(name, user.uid);
+        }
       }, (error) => {
         handleFirestoreError(error, OperationType.LIST, name);
       });
@@ -159,6 +165,38 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user]);
+
+  const seedDefaults = async (collName: string, uid: string) => {
+    // Basic avoidance of duplicate seeding if another listener is also empty
+    // Using a simple lock or just checking if any exist would be better, 
+    // but Firestore's onSnapshot on empty collection is reliable here.
+    const defaults: Record<string, any[]> = {
+      categories: [
+        { name: 'Eletrônicos', description: 'Dispositivos eletrônicos' },
+        { name: 'Acessórios', description: 'Cabos, capas e periféricos' },
+        { name: 'Serviços', description: 'Mão de obra e consultoria' },
+      ],
+      channels: [
+        { name: 'Loja Física', description: 'Vendas presenciais' },
+        { name: 'WhatsApp', description: 'Vendas pelo WhatsApp' },
+        { name: 'Instagram', description: 'Vendas pelo Direct' },
+        { name: 'Mercado Livre', description: 'Vendas no Marketplace' },
+      ],
+      paymentMethods: [
+        { name: 'Pix', feePercentage: 0, feeFixed: 0 },
+        { name: 'Dinheiro', feePercentage: 0, feeFixed: 0 },
+        { name: 'Cartão de Crédito', feePercentage: 4.99, feeFixed: 0.50 },
+        { name: 'Cartão de Débito', feePercentage: 1.99, feeFixed: 0.50 },
+      ]
+    };
+
+    const items = defaults[collName];
+    if (!items) return;
+
+    for (const item of items) {
+      await addEntity(collName, item);
+    }
+  };
 
   const addEntity = async (collName: string, data: any) => {
     if (!user) return;
@@ -172,7 +210,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const updateEntity = async (collName: string, id: string, data: any) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, collName, id), data);
+      // Remove id from data to avoid potential Firestore errors or confusing state
+      const { id: _, ...cleanData } = data;
+      await updateDoc(doc(db, collName, id), cleanData);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `${collName}/${id}`);
     }
