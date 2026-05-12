@@ -1,0 +1,5 @@
+{
+  "name": "VendasApp",
+  "description": "Um sistema completo para gestão de vendas de produtos, clientes e pedidos.",
+  "requestFramePermissions": []
+}
