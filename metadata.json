@@ -1,5 +1,5 @@
 {
-  "name": "VendasApp",
-  "description": "Um sistema completo para gestão de vendas de produtos, clientes e pedidos.",
+  "name": "VendaMax",
+  "description": "Sistema completo de gestão comercial com sincronização em nuvem e autenticação.",
   "requestFramePermissions": []
 }

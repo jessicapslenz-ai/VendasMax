@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "SalesChannel": {
+      "title": "Sales Channel",
+      "description": "Channel where sales occur",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "PaymentMethod": {
+      "title": "Payment Method",
+      "description": "Form of payment",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "feePercentage": { "type": "number" },
+        "feeFixed": { "type": "number" }
+      },
+      "required": ["userId", "name"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product in inventory",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "categoryId": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "name", "price"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Customer information",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Product supplier information",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "document": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Sale order",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "channelId": { "type": "string" },
+        "paymentMethodId": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "status": { "enum": ["pending", "completed", "cancelled"] },
+        "date": { "type": "string" }
+      },
+      "required": ["userId", "clientId", "total", "status", "date"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "enum": ["income", "expense"] },
+        "category": { "enum": ["sale", "inventory", "operational", "adjustment", "taxes", "payroll", "other"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "referenceId": { "type": "string" }
+      },
+      "required": ["userId", "type", "amount", "date"]
+    },
+    "Receivable": {
+      "title": "Receivable",
+      "description": "Amount to be received",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "status": { "enum": ["pending", "paid", "cancelled"] },
+        "clientId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "paymentDate": { "type": "string" }
+      },
+      "required": ["userId", "amount", "dueDate", "status"]
+    },
+    "Payable": {
+      "title": "Payable",
+      "description": "Amount to be paid",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "status": { "enum": ["pending", "paid", "cancelled"] },
+        "category": { "enum": ["operational", "inventory", "taxes", "payroll", "other"] },
+        "paymentDate": { "type": "string" }
+      },
+      "required": ["userId", "amount", "dueDate", "status"]
+    }
+  },
+  "firestore": {
+    "categories": { "schema": "Category", "description": "Collection of categories" },
+    "channels": { "schema": "SalesChannel", "description": "Collection of sales channels" },
+    "paymentMethods": { "schema": "PaymentMethod", "description": "Collection of payment methods" },
+    "products": { "schema": "Product", "description": "Collection of products" },
+    "clients": { "schema": "Client", "description": "Collection of clients" },
+    "suppliers": { "schema": "Supplier", "description": "Collection of suppliers" },
+    "orders": { "schema": "Order", "description": "Collection of orders" },
+    "transactions": { "schema": "Transaction", "description": "Collection of financial transactions" },
+    "receivables": { "schema": "Receivable", "description": "Collection of receivables" },
+    "payables": { "schema": "Payable", "description": "Collection of payables" }
+  }
+}

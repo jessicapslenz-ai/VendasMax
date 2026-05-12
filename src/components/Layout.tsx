@@ -22,8 +22,20 @@ const navItems = [
   { name: 'Gastos Operacionais', path: '/gastos-operacionais', icon: Wallet },
 ];
 
+import { LogOut, User as UserIcon } from 'lucide-react';
+import { useAuth } from './AuthContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+
 export const Layout = () => {
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   const NavLinks = () => (
     <>
@@ -90,6 +102,28 @@ export const Layout = () => {
               <SearchBar />
             </div>
             <ThemeToggle />
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="icon" className="rounded-full overflow-hidden" />}>
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName || ''} className="h-full w-full object-cover" />
+                ) : (
+                  <UserIcon className="h-5 w-5" />
+                )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.displayName || 'Usuário'}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sair</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">

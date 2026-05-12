@@ -1,5 +1,56 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  where, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  Timestamp,
+  serverTimestamp
+} from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
+import { useAuth } from '../components/AuthContext';
 import { Product, Client, Order, Category, SalesChannel, PaymentMethod, Transaction, Receivable, Payable, Supplier } from '../types';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface StoreContextType {
   products: Product[];
@@ -12,37 +63,37 @@ interface StoreContextType {
   receivables: Receivable[];
   payables: Payable[];
   suppliers: Supplier[];
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
-  addClient: (client: Omit<Client, 'id'>) => void;
-  updateClient: (id: string, client: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
-  addOrder: (order: Omit<Order, 'id' | 'date'>) => void;
-  updateOrderStatus: (id: string, status: Order['status']) => void;
-  updateOrder: (id: string, order: Partial<Order>) => void;
-  deleteOrder: (id: string) => void;
-  addCategory: (category: Omit<Category, 'id'>) => void;
-  updateCategory: (id: string, category: Partial<Category>) => void;
-  deleteCategory: (id: string) => void;
-  addChannel: (channel: Omit<SalesChannel, 'id'>) => void;
-  updateChannel: (id: string, channel: Partial<SalesChannel>) => void;
-  deleteChannel: (id: string) => void;
-  addPaymentMethod: (method: Omit<PaymentMethod, 'id'>) => void;
-  updatePaymentMethod: (id: string, method: Partial<PaymentMethod>) => void;
-  deletePaymentMethod: (id: string) => void;
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
-  updateTransaction: (id: string, transaction: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
-  addReceivable: (receivable: Omit<Receivable, 'id'>) => void;
-  updateReceivable: (id: string, receivable: Partial<Receivable>) => void;
-  deleteReceivable: (id: string) => void;
-  addPayable: (payable: Omit<Payable, 'id'>) => void;
-  updatePayable: (id: string, payable: Partial<Payable>) => void;
-  deletePayable: (id: string) => void;
-  addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
-  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
-  deleteSupplier: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  addClient: (client: Omit<Client, 'id'>) => Promise<void>;
+  updateClient: (id: string, client: Partial<Client>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
+  addOrder: (order: Omit<Order, 'id' | 'date'>) => Promise<void>;
+  updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
+  updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
+  deleteOrder: (id: string) => Promise<void>;
+  addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
+  updateCategory: (id: string, category: Partial<Category>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  addChannel: (channel: Omit<SalesChannel, 'id'>) => Promise<void>;
+  updateChannel: (id: string, channel: Partial<SalesChannel>) => Promise<void>;
+  deleteChannel: (id: string) => Promise<void>;
+  addPaymentMethod: (method: Omit<PaymentMethod, 'id'>) => Promise<void>;
+  updatePaymentMethod: (id: string, method: Partial<PaymentMethod>) => Promise<void>;
+  deletePaymentMethod: (id: string) => Promise<void>;
+  addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
+  updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+  addReceivable: (receivable: Omit<Receivable, 'id'>) => Promise<void>;
+  updateReceivable: (id: string, receivable: Partial<Receivable>) => Promise<void>;
+  deleteReceivable: (id: string) => Promise<void>;
+  addPayable: (payable: Omit<Payable, 'id'>) => Promise<void>;
+  updatePayable: (id: string, payable: Partial<Payable>) => Promise<void>;
+  deletePayable: (id: string) => Promise<void>;
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>;
+  updateSupplier: (id: string, supplier: Partial<Supplier>) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -55,439 +106,278 @@ export const useStore = () => {
   return context;
 };
 
-const generateId = () => Math.random().toString(36).substr(2, 9);
-
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(() => {
-    const saved = localStorage.getItem('vendamax_payment_methods');
-    return saved ? JSON.parse(saved) : [
-      { id: 'pm1', name: 'Pix', feePercentage: 0, feeFixed: 0 },
-      { id: 'pm2', name: 'Boleto', feePercentage: 0, feeFixed: 3.50 },
-      { id: 'pm3', name: 'Dinheiro', feePercentage: 0, feeFixed: 0 },
-      { id: 'pm4', name: 'Cartão de Crédito', feePercentage: 4.99, feeFixed: 0.50 },
-      { id: 'pm5', name: 'Cartão de Débito', feePercentage: 1.99, feeFixed: 0.50 },
-    ];
-  });
+  const { user } = useAuth();
+  
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [channels, setChannels] = useState<SalesChannel[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
+  const [payables, setPayables] = useState<Payable[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
-  const [channels, setChannels] = useState<SalesChannel[]>(() => {
-    const saved = localStorage.getItem('vendamax_channels');
-    return saved ? JSON.parse(saved) : [
-      { id: 'ch1', name: 'Loja Física', description: 'Vendas presenciais' },
-      { id: 'ch2', name: 'WhatsApp', description: 'Vendas pelo WhatsApp' },
-      { id: 'ch3', name: 'Instagram', description: 'Vendas pelo Direct/Loja do Instagram' },
-      { id: 'ch4', name: 'Marketplace (Facebook)', description: 'Facebook Marketplace' },
-      { id: 'ch5', name: 'Coolcase', description: 'Plataforma Coolcase' },
-    ];
-  });
-
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const saved = localStorage.getItem('vendamax_categories');
-    return saved ? JSON.parse(saved) : [
-      { id: 'cat1', name: 'Eletrônicos', description: 'Dispositivos eletrônicos em geral' },
-      { id: 'cat2', name: 'Acessórios', description: 'Acessórios para computadores e celulares' },
-    ];
-  });
-
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('vendamax_products');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.map((p: any) => ({
-        ...p,
-        categoryId: p.categoryId || (p.category === 'Electronics' ? 'cat1' : 'cat2')
-      }));
+  useEffect(() => {
+    if (!user) {
+      setProducts([]);
+      setClients([]);
+      setOrders([]);
+      setCategories([]);
+      setChannels([]);
+      setPaymentMethods([]);
+      setTransactions([]);
+      setReceivables([]);
+      setPayables([]);
+      setSuppliers([]);
+      return;
     }
-    return [
-      { id: 'p1', name: 'Notebook Pro', description: 'High performance laptop', price: 4500, stock: 10, categoryId: 'cat1' },
-      { id: 'p2', name: 'Wireless Mouse', description: 'Ergonomic mouse', price: 150, stock: 50, categoryId: 'cat2' },
+
+    const collections = [
+      { name: 'products', setter: setProducts },
+      { name: 'clients', setter: setClients },
+      { name: 'orders', setter: setOrders },
+      { name: 'categories', setter: setCategories },
+      { name: 'channels', setter: setChannels },
+      { name: 'paymentMethods', setter: setPaymentMethods },
+      { name: 'transactions', setter: setTransactions },
+      { name: 'receivables', setter: setReceivables },
+      { name: 'payables', setter: setPayables },
+      { name: 'suppliers', setter: setSuppliers },
     ];
-  });
 
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('vendamax_clients');
-    return saved ? JSON.parse(saved) : [
-      { id: 'c1', name: 'João Silva', email: 'joao@example.com', phone: '(11) 99999-9999', address: 'Rua A, 123' },
-      { id: 'c2', name: 'Maria Souza', email: 'maria@example.com', phone: '(11) 88888-8888', address: 'Avenida B, 456' },
-    ];
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('vendamax_orders');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.map((o: any) => ({
-        ...o,
-        channelId: o.channelId || 'ch1',
-        paymentMethodId: o.paymentMethodId || 'pm1'
-      }));
-    }
-    return [
-      { id: 'o1', clientId: 'c1', channelId: 'ch1', paymentMethodId: 'pm1', items: [{ productId: 'p1', quantity: 1, price: 4500 }], total: 4500, status: 'completed', date: new Date().toISOString() },
-    ];
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('vendamax_transactions');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return [
-      { id: 't1', type: 'income', category: 'sale', amount: 4500, description: 'Pedido #O1', date: new Date().toISOString(), referenceId: 'o1' }
-    ];
-  });
-
-  const [receivables, setReceivables] = useState<Receivable[]>(() => {
-    const saved = localStorage.getItem('vendamax_receivables');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return [];
-  });
-
-  const [payables, setPayables] = useState<Payable[]>(() => {
-    const saved = localStorage.getItem('vendamax_payables');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return [];
-  });
-
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem('vendamax_suppliers');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return [
-      { id: 's1', name: 'Fornecedor Exemplo', email: 'contato@fornecedor.com', phone: '(11) 3333-3333', document: '00.000.000/0001-00', address: 'Rua das Indústrias, 1000' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_categories', JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_channels', JSON.stringify(channels));
-  }, [channels]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_payment_methods', JSON.stringify(paymentMethods));
-  }, [paymentMethods]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_clients', JSON.stringify(clients));
-  }, [clients]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_receivables', JSON.stringify(receivables));
-  }, [receivables]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_payables', JSON.stringify(payables));
-  }, [payables]);
-
-  useEffect(() => {
-    localStorage.setItem('vendamax_suppliers', JSON.stringify(suppliers));
-  }, [suppliers]);
-
-  const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
-    setTransactions(prev => [...prev, { ...transaction, id: generateId() }]);
-  };
-
-  const updateTransaction = (id: string, updatedTransaction: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updatedTransaction } : t));
-  };
-
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  };
-
-  const addReceivable = (receivable: Omit<Receivable, 'id'>) => {
-    setReceivables(prev => [...prev, { ...receivable, id: generateId() }]);
-  };
-
-  const updateReceivable = (id: string, updatedReceivable: Partial<Receivable>) => {
-    setReceivables(prev => {
-      const oldReceivable = prev.find(r => r.id === id);
-      if (!oldReceivable) return prev;
-      
-      const newReceivable = { ...oldReceivable, ...updatedReceivable };
-      
-      // If status changed to paid, add a transaction
-      if (oldReceivable.status !== 'paid' && newReceivable.status === 'paid') {
-        addTransaction({
-          type: 'income',
-          category: 'sale',
-          amount: newReceivable.amount,
-          description: `Recebimento: ${newReceivable.description}`,
-          date: new Date().toISOString(),
-          referenceId: newReceivable.id
-        });
-        newReceivable.paymentDate = new Date().toISOString();
-      }
-      
-      return prev.map(r => r.id === id ? newReceivable : r);
+    const unsubscribes = collections.map(({ name, setter }) => {
+      const q = query(collection(db, name), where('userId', '==', user.uid));
+      return onSnapshot(q, (snapshot) => {
+        setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, name);
+      });
     });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [user]);
+
+  const addEntity = async (collName: string, data: any) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, collName), { ...data, userId: user.uid });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, collName);
+    }
   };
 
-  const deleteReceivable = (id: string) => {
-    setReceivables(prev => prev.filter(r => r.id !== id));
+  const updateEntity = async (collName: string, id: string, data: any) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, collName, id), data);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `${collName}/${id}`);
+    }
   };
 
-  const addPayable = (payable: Omit<Payable, 'id'>) => {
-    setPayables(prev => [...prev, { ...payable, id: generateId() }]);
+  const deleteEntity = async (collName: string, id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, collName, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${collName}/${id}`);
+    }
   };
 
-  const updatePayable = (id: string, updatedPayable: Partial<Payable>) => {
-    setPayables(prev => {
-      const oldPayable = prev.find(p => p.id === id);
-      if (!oldPayable) return prev;
-      
-      const newPayable = { ...oldPayable, ...updatedPayable };
-      
-      // If status changed to paid, add a transaction
-      if (oldPayable.status !== 'paid' && newPayable.status === 'paid') {
-        addTransaction({
-          type: 'expense',
-          category: newPayable.category,
-          amount: newPayable.amount,
-          description: `Pagamento: ${newPayable.description}`,
-          date: new Date().toISOString(),
-          referenceId: newPayable.id
-        });
-        newPayable.paymentDate = new Date().toISOString();
-      }
-      
-      return prev.map(p => p.id === id ? newPayable : p);
-    });
-  };
+  const addProduct = (product: Omit<Product, 'id'>) => addEntity('products', product);
+  const updateProduct = (id: string, product: Partial<Product>) => updateEntity('products', id, product);
+  const deleteProduct = (id: string) => deleteEntity('products', id);
 
-  const deletePayable = (id: string) => {
-    setPayables(prev => prev.filter(p => p.id !== id));
-  };
+  const addClient = (client: Omit<Client, 'id'>) => addEntity('clients', client);
+  const updateClient = (id: string, client: Partial<Client>) => updateEntity('clients', id, client);
+  const deleteClient = (id: string) => deleteEntity('clients', id);
 
-  const addProduct = (product: Omit<Product, 'id'>) => {
-    setProducts([...products, { ...product, id: generateId() }]);
-  };
+  const addCategory = (category: Omit<Category, 'id'>) => addEntity('categories', category);
+  const updateCategory = (id: string, category: Partial<Category>) => updateEntity('categories', id, category);
+  const deleteCategory = (id: string) => deleteEntity('categories', id);
 
-  const updateProduct = (id: string, updatedProduct: Partial<Product>) => {
-    setProducts(products.map(p => p.id === id ? { ...p, ...updatedProduct } : p));
-  };
+  const addChannel = (channel: Omit<SalesChannel, 'id'>) => addEntity('channels', channel);
+  const updateChannel = (id: string, channel: Partial<SalesChannel>) => updateEntity('channels', id, channel);
+  const deleteChannel = (id: string) => deleteEntity('channels', id);
 
-  const deleteProduct = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
-  };
+  const addPaymentMethod = (method: Omit<PaymentMethod, 'id'>) => addEntity('paymentMethods', method);
+  const updatePaymentMethod = (id: string, method: Partial<PaymentMethod>) => updateEntity('paymentMethods', id, method);
+  const deletePaymentMethod = (id: string) => deleteEntity('paymentMethods', id);
 
-  const addClient = (client: Omit<Client, 'id'>) => {
-    setClients([...clients, { ...client, id: generateId() }]);
-  };
+  const addSupplier = (supplier: Omit<Supplier, 'id'>) => addEntity('suppliers', supplier);
+  const updateSupplier = (id: string, supplier: Partial<Supplier>) => updateEntity('suppliers', id, supplier);
+  const deleteSupplier = (id: string) => deleteEntity('suppliers', id);
 
-  const updateClient = (id: string, updatedClient: Partial<Client>) => {
-    setClients(clients.map(c => c.id === id ? { ...c, ...updatedClient } : c));
-  };
+  const addTransaction = (transaction: Omit<Transaction, 'id'>) => addEntity('transactions', transaction);
+  const updateTransaction = (id: string, transaction: Partial<Transaction>) => updateEntity('transactions', id, transaction);
+  const deleteTransaction = (id: string) => deleteEntity('transactions', id);
 
-  const deleteClient = (id: string) => {
-    setClients(clients.filter(c => c.id !== id));
-  };
-
-  const addOrder = (order: Omit<Order, 'id' | 'date'>) => {
-    const newOrder: Order = {
-      ...order,
-      id: generateId(),
-      date: new Date().toISOString(),
-    };
-    setOrders([...orders, newOrder]);
+  const addReceivable = (receivable: Omit<Receivable, 'id'>) => addEntity('receivables', receivable);
+  const updateReceivable = async (id: string, updatedReceivable: Partial<Receivable>) => {
+    const old = receivables.find(r => r.id === id);
+    if (!old) return;
     
-    // Update stock
-    const updatedProducts = [...products];
-    order.items.forEach(item => {
-      const productIndex = updatedProducts.findIndex(p => p.id === item.productId);
-      if (productIndex !== -1) {
-        updatedProducts[productIndex] = {
-          ...updatedProducts[productIndex],
-          stock: updatedProducts[productIndex].stock - item.quantity
-        };
-      }
-    });
-    setProducts(updatedProducts);
-
-    // Add transaction if completed
-    if (newOrder.status === 'completed') {
-      setTransactions(prev => [...prev, {
-        id: generateId(),
+    const combined = { ...old, ...updatedReceivable };
+    if (old.status !== 'paid' && combined.status === 'paid') {
+      await addTransaction({
         type: 'income',
         category: 'sale',
-        amount: newOrder.total,
-        description: `Pedido #${newOrder.id.slice(0, 6).toUpperCase()}`,
-        date: newOrder.date,
-        referenceId: newOrder.id
-      }]);
-    } else if (newOrder.status === 'pending') {
-      // Add receivable if pending
-      setReceivables(prev => [...prev, {
-        id: generateId(),
-        description: `Pedido #${newOrder.id.slice(0, 6).toUpperCase()}`,
-        amount: newOrder.total,
-        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
-        status: 'pending',
-        clientId: newOrder.clientId,
-        orderId: newOrder.id
-      }]);
+        amount: combined.amount,
+        description: `Recebimento: ${combined.description}`,
+        date: new Date().toISOString(),
+        referenceId: id
+      });
+      combined.paymentDate = new Date().toISOString();
+    }
+    await updateEntity('receivables', id, combined);
+  };
+  const deleteReceivable = (id: string) => deleteEntity('receivables', id);
+
+  const addPayable = (payable: Omit<Payable, 'id'>) => addEntity('payables', payable);
+  const updatePayable = async (id: string, updatedPayable: Partial<Payable>) => {
+    const old = payables.find(p => p.id === id);
+    if (!old) return;
+    
+    const combined = { ...old, ...updatedPayable };
+    if (old.status !== 'paid' && combined.status === 'paid') {
+      await addTransaction({
+        type: 'expense',
+        category: combined.category,
+        amount: combined.amount,
+        description: `Pagamento: ${combined.description}`,
+        date: new Date().toISOString(),
+        referenceId: id
+      });
+      combined.paymentDate = new Date().toISOString();
+    }
+    await updateEntity('payables', id, combined);
+  };
+  const deletePayable = (id: string) => deleteEntity('payables', id);
+
+  const addOrder = async (order: Omit<Order, 'id' | 'date'>) => {
+    if (!user) return;
+    const date = new Date().toISOString();
+    const orderData = { ...order, userId: user.uid, date };
+    
+    try {
+      const docRef = await addDoc(collection(db, 'orders'), orderData);
+      const orderId = docRef.id;
+
+      // Update stock
+      for (const item of order.items) {
+        const product = products.find(p => p.id === item.productId);
+        if (product) {
+          await updateProduct(product.id, { stock: product.stock - item.quantity });
+        }
+      }
+
+      // Add transaction if completed
+      if (order.status === 'completed') {
+        await addTransaction({
+          type: 'income',
+          category: 'sale',
+          amount: order.total,
+          description: `Pedido #${orderId.slice(0, 6).toUpperCase()}`,
+          date,
+          referenceId: orderId
+        });
+      } else if (order.status === 'pending') {
+        // Add receivable if pending
+        await addReceivable({
+          description: `Pedido #${orderId.slice(0, 6).toUpperCase()}`,
+          amount: order.total,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'pending',
+          clientId: order.clientId,
+          orderId: orderId
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'orders');
     }
   };
 
-  const updateOrderStatus = (id: string, status: Order['status']) => {
+  const updateOrderStatus = async (id: string, status: Order['status']) => {
     const order = orders.find(o => o.id === id);
     if (!order) return;
 
-    setOrders(orders.map(o => o.id === id ? { ...o, status } : o));
+    await updateEntity('orders', id, { status });
 
-    // Handle transaction logic
     if (status === 'completed' && order.status !== 'completed') {
-      setTransactions(prev => [...prev, {
-        id: generateId(),
+      await addTransaction({
         type: 'income',
         category: 'sale',
         amount: order.total,
         description: `Pedido #${order.id.slice(0, 6).toUpperCase()}`,
         date: new Date().toISOString(),
         referenceId: order.id
-      }]);
+      });
       // Mark related receivable as paid
-      setReceivables(prev => prev.map(r => r.orderId === id && r.status === 'pending' ? { ...r, status: 'paid', paymentDate: new Date().toISOString() } : r));
+      const relatedReceivable = receivables.find(r => r.orderId === id && r.status === 'pending');
+      if (relatedReceivable) {
+        await updateReceivable(relatedReceivable.id, { status: 'paid' });
+      }
     } else if (status !== 'completed' && order.status === 'completed') {
-      setTransactions(prev => prev.filter(t => t.referenceId !== order.id));
+      const t = transactions.find(t => t.referenceId === order.id);
+      if (t) await deleteTransaction(t.id);
       // Revert related receivable
-      setReceivables(prev => prev.map(r => r.orderId === id && r.status === 'paid' ? { ...r, status: 'pending', paymentDate: undefined } : r));
+      const relatedReceivable = receivables.find(r => r.orderId === id && r.status === 'paid');
+      if (relatedReceivable) {
+        await updateReceivable(relatedReceivable.id, { status: 'pending', paymentDate: undefined });
+      }
     }
   };
 
-  const updateOrder = (id: string, updatedOrder: Partial<Order>) => {
-    const oldOrder = orders.find(o => o.id === id);
-    if (!oldOrder) return;
+  const updateOrder = async (id: string, updatedOrder: Partial<Order>) => {
+    const old = orders.find(o => o.id === id);
+    if (!old) return;
 
     if (updatedOrder.items) {
-      const updatedProducts = [...products];
-      
-      // Revert old stock
-      oldOrder.items.forEach(item => {
-        const productIndex = updatedProducts.findIndex(p => p.id === item.productId);
-        if (productIndex !== -1) {
-          updatedProducts[productIndex] = {
-            ...updatedProducts[productIndex],
-            stock: updatedProducts[productIndex].stock + item.quantity
-          };
-        }
-      });
-      
-      // Apply new stock
-      updatedOrder.items.forEach(item => {
-        const productIndex = updatedProducts.findIndex(p => p.id === item.productId);
-        if (productIndex !== -1) {
-          updatedProducts[productIndex] = {
-            ...updatedProducts[productIndex],
-            stock: updatedProducts[productIndex].stock - item.quantity
-          };
-        }
-      });
-      
-      setProducts(updatedProducts);
+      // Stock logic (simplified: re-calculate based on diff)
+      // For brevity in this refactor, I'll assume users update status mostly.
+      // But let's handle stock revert/apply if items change.
+      for (const item of old.items) {
+        const p = products.find(p => p.id === item.productId);
+        if (p) await updateProduct(p.id, { stock: p.stock + item.quantity });
+      }
+      for (const item of updatedOrder.items) {
+        const p = products.find(p => p.id === item.productId);
+        if (p) await updateProduct(p.id, { stock: p.stock - item.quantity });
+      }
     }
 
-    const newOrder = { ...oldOrder, ...updatedOrder };
-    setOrders(orders.map(o => o.id === id ? newOrder : o));
+    const combined = { ...old, ...updatedOrder };
+    await updateEntity('orders', id, combined);
 
-    // Handle transaction logic
-    if (newOrder.status === 'completed') {
-      const existingTransaction = transactions.find(t => t.referenceId === id);
-      if (existingTransaction) {
-        if (existingTransaction.amount !== newOrder.total) {
-          updateTransaction(existingTransaction.id, { amount: newOrder.total });
+    if (combined.status === 'completed') {
+      const t = transactions.find(t => t.referenceId === id);
+      if (t) {
+        if (t.amount !== combined.total) {
+          await updateTransaction(t.id, { amount: combined.total });
         }
       } else {
-        addTransaction({
+        await addTransaction({
           type: 'income',
           category: 'sale',
-          amount: newOrder.total,
-          description: `Pedido #${newOrder.id.slice(0, 6).toUpperCase()}`,
+          amount: combined.total,
+          description: `Pedido #${id.slice(0, 6).toUpperCase()}`,
           date: new Date().toISOString(),
-          referenceId: newOrder.id
+          referenceId: id
         });
       }
     } else {
-      const existingTransaction = transactions.find(t => t.referenceId === id);
-      if (existingTransaction) {
-        deleteTransaction(existingTransaction.id);
-      }
+      const t = transactions.find(t => t.referenceId === id);
+      if (t) await deleteTransaction(t.id);
     }
   };
 
-  const deleteOrder = (id: string) => {
-    setOrders(orders.filter(o => o.id !== id));
-    const existingTransaction = transactions.find(t => t.referenceId === id);
-    if (existingTransaction) {
-      deleteTransaction(existingTransaction.id);
-    }
-  };
-
-  const addCategory = (category: Omit<Category, 'id'>) => {
-    setCategories([...categories, { ...category, id: generateId() }]);
-  };
-
-  const updateCategory = (id: string, updatedCategory: Partial<Category>) => {
-    setCategories(categories.map(c => c.id === id ? { ...c, ...updatedCategory } : c));
-  };
-
-  const deleteCategory = (id: string) => {
-    setCategories(categories.filter(c => c.id !== id));
-  };
-
-  const addChannel = (channel: Omit<SalesChannel, 'id'>) => {
-    setChannels([...channels, { ...channel, id: generateId() }]);
-  };
-
-  const updateChannel = (id: string, updatedChannel: Partial<SalesChannel>) => {
-    setChannels(channels.map(c => c.id === id ? { ...c, ...updatedChannel } : c));
-  };
-
-  const deleteChannel = (id: string) => {
-    setChannels(channels.filter(c => c.id !== id));
-  };
-
-  const addPaymentMethod = (method: Omit<PaymentMethod, 'id'>) => {
-    setPaymentMethods([...paymentMethods, { ...method, id: generateId() }]);
-  };
-
-  const updatePaymentMethod = (id: string, updatedMethod: Partial<PaymentMethod>) => {
-    setPaymentMethods(paymentMethods.map(pm => pm.id === id ? { ...pm, ...updatedMethod } : pm));
-  };
-
-  const deletePaymentMethod = (id: string) => {
-    setPaymentMethods(paymentMethods.filter(pm => pm.id !== id));
-  };
-
-  const addSupplier = (supplier: Omit<Supplier, 'id'>) => {
-    setSuppliers([...suppliers, { ...supplier, id: generateId() }]);
-  };
-
-  const updateSupplier = (id: string, updatedSupplier: Partial<Supplier>) => {
-    setSuppliers(suppliers.map(s => s.id === id ? { ...s, ...updatedSupplier } : s));
-  };
-
-  const deleteSupplier = (id: string) => {
-    setSuppliers(suppliers.filter(s => s.id !== id));
+  const deleteOrder = async (id: string) => {
+    await deleteEntity('orders', id);
+    const t = transactions.find(t => t.referenceId === id);
+    if (t) await deleteTransaction(t.id);
   };
 
   return (
